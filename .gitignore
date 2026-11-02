@@ -1,0 +1,26 @@
+# Dependencias (se reinstalan con npm install)
+node_modules/
+
+# Lo que genera npm run build
+dist/
+
+# Configuración local de Vercel
+.vercel/
+
+# Claves y variables de entorno (nunca a GitHub)
+.env
+.env.*
+!.env.example
+
+# Supabase local
+supabase/.temp/
+supabase/.branches/
+
+# Archivos del sistema y de editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+npm-debug.log*
+.vercel
