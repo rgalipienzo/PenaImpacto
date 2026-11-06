@@ -82,7 +82,7 @@ export default function Altas({ me, onBack }) {
           ) : (
             <div className="empty">Todavía no se ha mandado ninguna invitación.</div>
           )}
-          {Object.keys(socioDe).length ? <p className="small muted">Toca una invitación aceptada para dar de baja a ese socio.</p> : null}
+          {Object.keys(socioDe).length ? <p className="small muted">Toca una invitación aceptada para hacer administrador o dar de baja a ese socio.</p> : null}
         </>
       )}
 

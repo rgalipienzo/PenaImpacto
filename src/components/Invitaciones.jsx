@@ -96,13 +96,33 @@ export function InviteSheet({ me, onClose }) {
 
   const link = token ? api.inviteLink(token) : ''
   const saludo = nombre.trim() ? `¡Hola ${nombre.trim().split(' ')[0]}!` : '¡Hola!'
-  const texto = `${saludo} ${me.nombre} te invita a Peña Impacto, la app del txoko para apuntarse a almuerzos, comidas y cenas. Pide tu alta aquí:`
-  const waUrl = `https://wa.me/?text=${encodeURIComponent(`${texto} ${link}`)}`
+  // Mensaje completo con los pasos del alta (los asteriscos son negrita en WhatsApp). El enlace va en el paso 1.
+  const texto = [
+    `👋 ${saludo} ${me.nombre} te invita a la app de la *Peña Impacto*, donde nos apuntamos a almuerzos, comidas y cenas.`,
+    '',
+    'Para darte de alta:',
+    '',
+    `1️⃣ Abre este enlace: ${link}`,
+    '2️⃣ Escribe tu *nombre* y tu *email* y pulsa *«Pedir el alta»*.',
+    '3️⃣ Espera a que un administrador acepte tu solicitud.',
+    '4️⃣ Cuando te acepten, entra de una de estas dos formas:',
+    '   🔐 *Con Google o Microsoft* (si tu email es Gmail, Hotmail u Outlook): abre la app y pulsa *Google* o *Microsoft*. Sin contraseña.',
+    '   ✉️ *Con contraseña*: abre el *correo* que te llegará (si no lo ves, mira en *spam*), pulsa el enlace, elige tu *contraseña* y pulsa *«Guardar y entrar»*.',
+    '5️⃣ ¡Ya estás dentro! Las siguientes veces entra de la misma forma.',
+    '',
+    '📱 Consejo: añade la app a la pantalla de inicio del móvil para tenerla a mano.',
+    '• iPhone: en Safari, botón Compartir → «Añadir a pantalla de inicio».',
+    '• Android: menú del navegador (⋮) → «Añadir a pantalla de inicio».',
+    '',
+    '¡Nos vemos en la peña! 🎉',
+  ].join('\n')
+  const waUrl = `https://wa.me/?text=${encodeURIComponent(texto)}`
 
   async function share() {
     setError('')
     try {
-      await navigator.share({ title: 'Invitación a Peña Impacto', text: texto, url: link })
+      // Sin "url" aparte: el enlace ya va dentro del texto (si no, saldría repetido).
+      await navigator.share({ title: 'Invitación a Peña Impacto', text: texto })
       setShared(true)
     } catch (err) {
       if (err?.name !== 'AbortError') setError('No se ha podido abrir Compartir. Copia el enlace y mándalo tú.')
@@ -111,7 +131,7 @@ export function InviteSheet({ me, onClose }) {
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(`${texto} ${link}`)
+      await navigator.clipboard.writeText(texto)
       setCopied(true)
     } catch {
       setCopied(false)

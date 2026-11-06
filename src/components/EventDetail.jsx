@@ -3,20 +3,22 @@ import * as api from '../api.js'
 import Sheet from './Sheet.jsx'
 import { KIND_ICON, Minus, Plus } from './Icons.jsx'
 import Consumiciones from './Consumiciones.jsx'
+import CorregirApuntados from './CorregirApuntados.jsx'
 import GastosComida from './GastosComida.jsx'
-import { KIND_LABEL, esReserva, euros, genteText, horaText, joinClosed, longDate, plural, totalText } from '../lib.js'
+import { KIND_LABEL, esReserva, euros, genteText, haEmpezado, horaText, joinClosed, longDate, plural, totalText } from '../lib.js'
 import { confirmar } from './confirmar.jsx'
 
 // allowDelete: Modificar y Borrar evento solo se ofrecen desde el Calendario, y solo a quien lo creó.
-// withDeadline: desde Eventos, apuntarse y desapuntarse se cierra 1 hora antes.
+// withDeadline: desde Eventos, apuntarse y desapuntarse se cierra a la hora de comienzo
+// (salvo que el organizador lo vuelva a abrir: onReabrir).
 // allowJoin: apuntarse, desapuntarse y cambiar acompañantes (solo desde Eventos).
 // allowExpenses: mis consumiciones y los gastos de la comida (solo desde la pantalla principal).
-export default function EventDetail({ event, me, allowDelete, withDeadline, allowJoin, allowExpenses, showExpensesNote, onClose, onJoin, onLeave, onEdit, onDelete }) {
+export default function EventDetail({ event, me, allowDelete, withDeadline, allowJoin, allowExpenses, showExpensesNote, onClose, onJoin, onLeave, onEdit, onDelete, onReabrir, onCorregido }) {
   const [adultos, setAdultos] = useState(event.misComensales || 1)
   const [ninos, setNinos] = useState(event.misNinos || 0)
   const [amigos, setAmigos] = useState(event.misAmigos || 0)
   const [amigosNinos, setAmigosNinos] = useState(event.misAmigosNinos || 0)
-  const [cuotaInv, setCuotaInv] = useState(null) // { adulto, nino }: cuota de cada amigo invitado
+  const [cuotaInv, setCuotaInv] = useState(null) // { adulto, nino, famAdulto, famNino }: cuota de cada invitado
   useEffect(() => { api.getCuotasInvitado().then(setCuotaInv, () => {}) }, [])
   const cambiado = adultos !== event.misComensales || ninos !== event.misNinos || amigos !== (event.misAmigos || 0) || amigosNinos !== (event.misAmigosNinos || 0)
   const voy = event.misComensales > 0
@@ -30,7 +32,11 @@ export default function EventDetail({ event, me, allowDelete, withDeadline, allo
   const [consumo, setConsumo] = useState({ total: 0, items: [] }) // mis consumiciones, para la cuenta
   const onConsumo = useCallback((total, items) => setConsumo({ total, items }), [])
   const Icon = KIND_ICON[event.tipo]
-  const puedeBorrar = allowDelete && event.organizadorId === me.id
+  // Modificar y borrar (desde el Calendario): quien lo creó o un administrador.
+  const mando = event.organizadorId === me.id || me.es_admin // puede hacer lo que haría el organizador
+  const puedeModificar = allowDelete && mando
+  const puedeBorrar = allowDelete && mando
+  const [corrigiendo, setCorrigiendo] = useState(false)
   const cerrado = allowJoin && withDeadline && joinClosed(event)
   // Consumiciones y gastos: desde "Mis eventos de este día" de la pantalla principal; desde "próximos" solo se ven.
   const gastosAbiertos = allowExpenses
@@ -104,17 +110,27 @@ export default function EventDetail({ event, me, allowDelete, withDeadline, allo
       {!allowJoin ? (
         <p className="small muted center-text">{allowExpenses || showExpensesNote ? 'Para cambiar tus acompañantes, ve a la pestaña Eventos.' : 'Para apuntarte o cambiar tus acompañantes, ve a la pestaña Eventos.'}</p>
       ) : cerrado ? (
-        <p className="closed-note">Ya no te puedes apuntar ni desapuntar: se cierra 1 hora antes del evento.</p>
+        <p className="closed-note">
+          Ya no te puedes apuntar ni desapuntar: se cierra a la hora de comienzo.
+          {mando ? ' Si hace falta, puedes volver a abrirlo desde el Calendario.' : ` Si hace falta, ${event.organizador} lo puede volver a abrir.`}
+        </p>
       ) : (
+      <>
+      {event.reabierto && haEmpezado(event) ? (
+        <p className="reabierto-note">{esOrganizador ? 'Lo has vuelto a abrir: todavía se puede apuntar la gente.' : `${event.organizador} lo ha vuelto a abrir: todavía te puedes apuntar.`}</p>
+      ) : withDeadline ? (
+        <p className="hasta-note">Puedes apuntarte o desapuntarte hasta la hora del evento.</p>
+      ) : null}
       <section className="detail-block">
         <h3 className="counter-title">{voy ? 'Acompañantes' : '¿Cuántos vais?'}</h3>
-        <p className="counter-group">Familia <span>· no paga cuota de invitado</span></p>
-        <Counter id="adultos" label="Adultos" hint="Contándote a ti" value={adultos} min={1} onChange={setAdultos} />
-        <Counter id="ninos" label="Niños" hint="De 0 a 14 años" value={ninos} min={0} onChange={setNinos} />
+        <p className="counter-group">Familia <span>· {cuotaInv?.famAdulto || cuotaInv?.famNino ? 'paga cuota de familiar' : 'no paga cuota de invitado'}</span></p>
+        <Counter id="adultos" label="Adultos" hint={cuotaInv?.famAdulto ? `Contándote a ti · los demás, ${euros(cuotaInv.famAdulto)} cada uno` : 'Contándote a ti'} value={adultos} min={1} onChange={setAdultos} />
+        <Counter id="ninos" label="Niños" hint={cuotaInv?.famNino ? `De 0 a 14 años · ${euros(cuotaInv.famNino)} cada uno` : 'De 0 a 14 años'} value={ninos} min={0} onChange={setNinos} />
         <p className="counter-group">Amigos invitados <span>· pagan cuota de invitado</span></p>
         <Counter id="amigos" label="Adultos" hint={cuotaInv ? `${euros(cuotaInv.adulto)} cada uno` : null} value={amigos} min={0} onChange={setAmigos} />
         <Counter id="amigos-ninos" label="Niños" hint={cuotaInv ? `De 0 a 14 años · ${euros(cuotaInv.nino)} cada uno` : 'De 0 a 14 años'} value={amigosNinos} min={0} onChange={setAmigosNinos} />
       </section>
+      </>
       )}
 
       {gastosAbiertos ? <Consumiciones eventoId={event.id} meId={me.id} onTotal={onConsumo} /> : null}
@@ -143,13 +159,20 @@ export default function EventDetail({ event, me, allowDelete, withDeadline, allo
         ) : (
           <button type="button" className="btn primary block" disabled={busy} onClick={() => run(() => onJoin(adultos, ninos, amigos, amigosNinos))}>Me apunto</button>
         )}
-        {puedeBorrar ? (
-          <>
-            <button type="button" className="btn secondary block" disabled={busy} onClick={onEdit}>Modificar evento</button>
-            <button type="button" className="btn danger block" disabled={busy} onClick={borrar}>Borrar evento</button>
-          </>
+        {allowDelete && me.es_admin && onCorregido && !esReserva(event) ? (
+          <button type="button" className="btn secondary block" disabled={busy} onClick={() => setCorrigiendo(true)}>Corregir apuntados</button>
         ) : null}
+        {allowDelete && mando && onReabrir && !esReserva(event) && haEmpezado(event) ? (
+          event.reabierto ? (
+            <button type="button" className="btn secondary block" disabled={busy} onClick={() => run(() => onReabrir(false))}>Cerrar para apuntarse</button>
+          ) : (
+            <button type="button" className="btn secondary block" disabled={busy} onClick={() => run(() => onReabrir(true))}>Volver a abrir para apuntarse</button>
+          )
+        ) : null}
+        {puedeModificar ? <button type="button" className="btn secondary block" disabled={busy} onClick={onEdit}>Modificar evento</button> : null}
+        {puedeBorrar ? <button type="button" className="btn danger block" disabled={busy} onClick={borrar}>Borrar evento</button> : null}
       </div>
+      {corrigiendo ? <CorregirApuntados event={event} onClose={() => setCorrigiendo(false)} onChanged={onCorregido} /> : null}
     </Sheet>
   )
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import * as api from '../api.js'
+import { useCambios } from '../realtime.js'
 import Sheet from '../components/Sheet.jsx'
 import ScreenTitle from '../components/ScreenTitle.jsx'
 import { Chevron, Pencil } from '../components/Icons.jsx'
@@ -23,7 +24,8 @@ export default function Pagos({ me, onBack }) {
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  const cambios = useCambios()
+  useEffect(() => { load() }, [load, cambios])
 
   return (
     <section className="screen">
@@ -100,9 +102,10 @@ function MisGastos({ meId }) {
   const [error, setError] = useState('')
   const [abiertos, setAbiertos] = useState({}) // evento id → true si su ticket está desplegado
 
+  const cambios = useCambios()
   useEffect(() => {
     api.listMisCuentas(meId).then(setList, (err) => setError(err.message))
-  }, [meId])
+  }, [meId, cambios])
 
   // Lo pendiente de cada evento: si lo marqué como pagado, solo cuenta la diferencia (si la cuenta cambió después).
   const pendiente = (g) => (g.pago && g.saldo > 0 ? Math.round((g.saldo - g.pago.importe) * 100) / 100 : g.saldo)

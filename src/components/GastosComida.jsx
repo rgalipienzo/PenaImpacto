@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import * as api from '../api.js'
+import { useCambios } from '../realtime.js'
 import Sheet from './Sheet.jsx'
 import Ticket from './Ticket.jsx'
 import { Close, Plus } from './Icons.jsx'
@@ -34,7 +35,8 @@ export default function GastosComida({ event, me, voy, consumo, consumos = [], o
     }
   }, [event.id, me.id])
 
-  useEffect(() => { load() }, [load])
+  const cambios = useCambios()
+  useEffect(() => { load() }, [load, cambios])
 
   async function quitar(g) {
     if (!(await confirmar(`¿Quitar «${g.concepto}» (${euros(g.importe)})?`, { si: 'Quitar' }))) return
@@ -67,9 +69,9 @@ export default function GastosComida({ event, me, voy, consumo, consumos = [], o
         <ul className="consumo-list">
           {gastos.map((g) => (
             <li key={g.id}>
-              {g.socio_id === me.id ? (
+              {g.socio_id === me.id || me.es_admin ? (
                 <button type="button" className="line-btn" onClick={() => setEditing(g)} aria-label={`Cambiar ${g.concepto}`}>
-                  <span>{g.concepto}<span className="gasto-who"> · tú</span></span>
+                  <span>{g.concepto}<span className="gasto-who"> · {g.socio_id === me.id ? 'tú' : g.nombre}</span></span>
                   <strong>{euros(g.importe)}</strong>
                 </button>
               ) : (
@@ -133,7 +135,8 @@ export default function GastosComida({ event, me, voy, consumo, consumos = [], o
         </Ticket>
       ) : null}
 
-      {gastos.some((g) => g.socio_id === me.id) ? <p className="small muted">Toca uno de tus gastos para cambiarlo o la ✕ para borrarlo.</p> : null}
+      {me.es_admin && gastos.length ? <p className="small muted">Como administrador, toca cualquier gasto para cambiarlo o la ✕ para borrarlo.</p> : null}
+      {!me.es_admin && gastos.some((g) => g.socio_id === me.id) ? <p className="small muted">Toca uno de tus gastos para cambiarlo o la ✕ para borrarlo.</p> : null}
 
       {error ? <p className="error">{error}</p> : null}
 

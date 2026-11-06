@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import * as api from '../api.js'
+import { useCambios } from '../realtime.js'
 import { Chevron, Close, Minus, Plus } from './Icons.jsx'
 import { euros } from '../lib.js'
 import { confirmar } from './confirmar.jsx'
@@ -19,10 +20,11 @@ export default function Consumiciones({ eventoId, meId, onTotal }) {
     setMine(cs)
   }
 
+  const cambios = useCambios()
   useEffect(() => {
     load().catch((err) => setError(/consumiciones|tarifas/i.test(err.message) ? 'Falta preparar las consumiciones en Supabase.' : err.message))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventoId, meId])
+  }, [eventoId, meId, cambios])
 
   const total = mine.reduce((s, c) => s + c.cantidad * c.precio, 0)
 

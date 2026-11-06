@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import * as api from '../api.js'
+import { useCambios } from '../realtime.js'
 import Sheet from '../components/Sheet.jsx'
 import { Pencil, Plus } from '../components/Icons.jsx'
 import { euros, parseEuros } from '../lib.js'
@@ -23,7 +24,8 @@ export default function Tarifas({ me }) {
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  const cambios = useCambios()
+  useEffect(() => { load() }, [load, cambios])
 
   if (error) {
     return (
@@ -40,6 +42,11 @@ export default function Tarifas({ me }) {
     .filter((g) => g.items.length)
   // "Invitado" es una norma, como el reparto de la comida: va justo debajo de él.
   const invitados = todos.find((g) => g.categoria === 'Invitado')
+  if (invitados) {
+    // Familiar antes que amigo; adulto antes que infantil.
+    const orden = (t) => (/famil/i.test(t.nombre) ? 0 : 2) + (/infantil|niñ/i.test(t.nombre) ? 1 : 0)
+    invitados.items = [...invitados.items].sort((a, b) => orden(a) - orden(b))
+  }
   const grupos = todos.filter((g) => g.categoria !== 'Invitado')
 
   const Grupo = ({ g }) => (
@@ -161,9 +168,10 @@ function PrecioNinos({ me }) {
   const [error, setError] = useState('')
   const close = useCallback(() => setEditing(false), [])
 
+  const cambios = useCambios()
   useEffect(() => {
     api.getAjustes().then((a) => setPct(a.porcentajeNinos), () => setPct(null))
-  }, [])
+  }, [cambios])
 
   async function submit(e) {
     e.preventDefault()
@@ -224,9 +232,10 @@ function CuotaMensual({ me }) {
   const [error, setError] = useState('')
   const close = useCallback(() => setEditing(false), [])
 
+  const cambios = useCambios()
   useEffect(() => {
     api.getCuota().then(setCuota, () => setCuota(null))
-  }, [])
+  }, [cambios])
 
   async function submit(e) {
     e.preventDefault()

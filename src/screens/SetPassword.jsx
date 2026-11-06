@@ -27,7 +27,7 @@ export default function SetPassword({ invite, onDone }) {
     <div className="login-wrap">
       <form className="login" onSubmit={submit}>
         <img src="/icon-512.png" alt="Peña Impacto" width="120" height="120" className="login-logo" />
-        <h1>{invite ? '¡Bienvenido al txoko!' : 'Nueva contraseña'}</h1>
+        <h1>{invite ? '¡Bienvenido a la Peña Impacto!' : 'Nueva contraseña'}</h1>
         <p className="muted center-text">{invite ? 'Elige una contraseña para entrar a partir de ahora.' : 'Escribe tu nueva contraseña.'}</p>
         <div className="field">
           <label className="label" htmlFor="pw">Contraseña</label>

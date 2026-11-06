@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as api from './api.js'
 import { DEMO } from './config.js'
+import { startRealtime, useCambios } from './realtime.js'
 import { addMonths, monthEnd, monthStart } from './lib.js'
 import { Avatar, Menu } from './components/Icons.jsx'
 import Nav from './components/Nav.jsx'
@@ -133,6 +134,14 @@ export default function App() {
     setMonthLoaded(false)
     setSelected(next === monthStart(today) ? today : next)
   }
+
+  // Tiempo real: si otro socio cambia algo, se vuelve a cargar.
+  useEffect(() => (userId && !DEMO ? startRealtime() : undefined), [userId])
+  const cambios = useCambios()
+  useEffect(() => {
+    if (cambios) reloadAll()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cambios])
 
   // Al volver a la app (por ejemplo, al día siguiente), refresca.
   useEffect(() => {
@@ -285,7 +294,7 @@ export default function App() {
 
       {opened ? (
         <EventDetail
-          key={`${opened.id}-${opened.misComensales}-${opened.misNinos}-${opened.misAmigos}-${opened.misAmigosNinos}`}
+          key={`${opened.id}-${opened.reabierto}-${opened.misComensales}-${opened.misNinos}-${opened.misAmigos}-${opened.misAmigosNinos}`}
           event={opened}
           me={me}
           allowDelete={openFrom === 'calendario'}
@@ -296,6 +305,8 @@ export default function App() {
           onClose={closeDetail}
           onJoin={async (adultos, ninos, amigos, amigosNinos) => { await api.join(opened.id, userId, adultos, ninos, amigos, amigosNinos); await reloadAll() }}
           onLeave={async () => { await api.leave(opened.id, userId); await reloadAll() }}
+          onCorregido={reloadAll}
+          onReabrir={async (v) => { await api.setReabierto(opened.id, v); await reloadAll() }}
           onEdit={() => { setEditing(opened); setOpenId(null) }}
           onDelete={async () => { await api.deleteEvent(opened.id); setOpenId(null); await reloadAll() }}
         />

@@ -5,6 +5,13 @@ import * as demo from './demo.js'
 export { dateKey, addDays } from './lib.js'
 import { dateKey, reparto } from './lib.js'
 
+// Si al volver de Google/Microsoft hay un error, viene en la dirección: se lee antes de que Supabase la limpie.
+export const OAUTH_ERROR = (() => {
+  if (typeof window === 'undefined') return ''
+  const p = new URLSearchParams(window.location.hash.slice(1) + '&' + window.location.search.slice(1))
+  return p.get('error_description') || p.get('error') || ''
+})()
+
 export const supabase = DEMO ? null : createClient(SUPABASE_URL, SUPABASE_KEY)
 
 // ---- Sesión ----
@@ -30,6 +37,27 @@ export function onAuthChange(cb, onRecovery) {
     cb(s)
   })
   return () => data.subscription.unsubscribe()
+}
+
+// Qué formas de entrar están activadas en Supabase (Authentication → Providers): { google, azure }.
+export async function getProveedores() {
+  if (DEMO) return {}
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/settings`, { headers: { apikey: SUPABASE_KEY } })
+    const { external = {} } = await r.json()
+    return { google: !!external.google, azure: !!external.azure }
+  } catch {
+    return {}
+  }
+}
+
+// Entrar con Google ('google') o Microsoft ('azure': Hotmail, Outlook).
+export async function signInWith(provider) {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: { redirectTo: window.location.origin, scopes: provider === 'azure' ? 'email' : undefined },
+  })
+  if (error) throw error
 }
 
 export async function signIn(email, password) {
@@ -95,6 +123,7 @@ function shape(e, meId) {
     listaId: e.lista?.id || null,
     compra: sortItems(e.lista?.items || []).map((i) => i.texto), // cosas de la lista de la compra
     organizadorId: e.organizador_id,
+    reabierto: !!e.reabierto, // el organizador lo ha vuelto a abrir para apuntarse después de la hora
     organizador: e.organizador?.nombre || '—',
     apuntados,
     personas: apuntados.reduce((n, a) => n + a.comensales + a.ninos + a.amigos + a.amigos_ninos, 0),
@@ -107,7 +136,7 @@ function shape(e, meId) {
 }
 
 const EVENT_FIELDS =
-  'id, fecha, hora, tipo, titulo, notas, organizador_id, lista:listas(id, items:lista_items(id, texto, comprado, created_at)), organizador:socios!eventos_organizador_id_fkey(nombre), apuntados(socio_id, comensales, ninos, amigos, amigos_ninos, socio:socios(nombre))'
+  'id, fecha, hora, tipo, titulo, notas, organizador_id, reabierto, lista:listas(id, items:lista_items(id, texto, comprado, created_at)), organizador:socios!eventos_organizador_id_fkey(nombre), apuntados(socio_id, comensales, ninos, amigos, amigos_ninos, socio:socios(nombre))'
 
 // Eventos entre dos fechas (incluidas), ordenados por fecha y hora.
 export async function listEvents(fromKey, toKey, meId) {
@@ -148,6 +177,13 @@ export async function updateEvent(event, { compra, ...fields }) {
 export async function deleteEvent(id) {
   if (DEMO) return demo.deleteEvent(id)
   const { error } = await supabase.from('eventos').delete().eq('id', id)
+  if (error) throw error
+}
+
+// Quien organiza el evento lo vuelve a abrir (o lo cierra) para apuntarse después de la hora.
+export async function setReabierto(eventId, reabierto) {
+  if (DEMO) return
+  const { error } = await supabase.from('eventos').update({ reabierto }).eq('id', eventId)
   if (error) throw error
 }
 
@@ -546,7 +582,8 @@ export async function listMisCuentas(meId) {
     const g = gastos.filter((x) => x.evento_id === e.id)
     const c = consumos.find((x) => x.evento.id === e.id)
     const yo = e.apuntados.find((x) => x.socio_id === meId)
-    if (!g.length && !c && !(yo?.amigos || yo?.amigos_ninos)) continue
+    const conFamilia = (cuotaInv.famAdulto && yo?.comensales > 1) || (cuotaInv.famNino && yo?.ninos)
+    if (!g.length && !c && !(yo?.amigos || yo?.amigos_ninos || conFamilia)) continue
     const p = pagos.find((x) => x.evento_id === e.id)
     out.push({
       evento: e,
@@ -620,12 +657,14 @@ export async function marcarAvisosVistos(meId) {
   return now
 }
 
-// Cuota de invitado (Tarifas → Invitados): la tarifa con "infantil"/"niño" es la de niños; la otra, la de adultos.
+// Cuotas de invitado (Tarifas → Invitados). Por el nombre de cada tarifa:
+// "familiar" = familia del socio (si no, amigo); "infantil"/"niño" = niños (si no, adultos).
 export async function getCuotasInvitado() {
   const inv = (await listTarifas()).filter((t) => t.categoria === 'Invitado')
-  const nino = inv.find((t) => /infantil|niñ/i.test(t.nombre))
-  const adulto = inv.find((t) => t !== nino)
-  return { adulto: adulto?.precio || 0, nino: nino?.precio || 0 }
+  const esFam = (t) => /famil/i.test(t.nombre)
+  const esNino = (t) => /infantil|niñ/i.test(t.nombre)
+  const precio = (fam, nino) => inv.find((t) => esFam(t) === fam && esNino(t) === nino)?.precio || 0
+  return { adulto: precio(false, false), nino: precio(false, true), famAdulto: precio(true, false), famNino: precio(true, true) }
 }
 
 // ---- Bajas de socios (solo administradores) ----
@@ -633,6 +672,13 @@ export async function getCuotasInvitado() {
 export async function setBaja(socioId, baja) {
   if (DEMO) return demo.setBaja(socioId, baja)
   const { error } = await supabase.rpc('dar_de_baja', { p_socio: socioId, p_baja: baja })
+  if (error) throw error
+}
+
+// Dar o quitar permisos de administrador a otro socio (solo administradores).
+export async function setAdmin(socioId, admin) {
+  if (DEMO) return
+  const { error } = await supabase.rpc('set_admin', { p_socio: socioId, p_admin: admin })
   if (error) throw error
 }
 

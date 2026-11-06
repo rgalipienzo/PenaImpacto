@@ -68,7 +68,7 @@ export default function SolicitudAlta({ token }) {
   } else {
     body = (
       <>
-        <h1>¡Bienvenido al txoko!</h1>
+        <h1>¡Bienvenido a la Peña Impacto!</h1>
         <p className="muted center-text"><strong>{inv.invita}</strong> te ha invitado a Peña Impacto. Pide tu alta:</p>
         <div className="field">
           <label className="label" htmlFor="sol-nombre">Tu nombre</label>

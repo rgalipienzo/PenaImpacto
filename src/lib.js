@@ -85,14 +85,16 @@ export function monthTitle(monthKey) {
   return cap(new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' }).format(parse(monthKey)))
 }
 
-// Hasta cuándo se puede apuntar o desapuntar uno: 1 hora antes de que empiece el evento.
-export const CIERRE_MINUTOS = 60
-export function joinClosed(event, now = new Date()) {
+// Hasta cuándo se puede apuntar o desapuntar uno: hasta la hora de comienzo del evento.
+export const CIERRE_MINUTOS = 0
+export function haEmpezado(event, now = new Date()) {
   const [y, m, d] = event.fecha.split('-').map(Number)
   const [h, min] = event.hora.split(':').map(Number)
   const start = new Date(y, m - 1, d, h, min)
   return now.getTime() > start.getTime() - CIERRE_MINUTOS * 60 * 1000
 }
+// Cerrado para apuntarse, salvo que quien lo organiza lo haya vuelto a abrir.
+export const joinClosed = (event, now = new Date()) => !event.reabierto && haEmpezado(event, now)
 
 // "3 adultos · 1 niño": familia y amigos sumados (cuando solo interesa el total)
 export function totalText(a) {
@@ -122,8 +124,10 @@ export const parseEuros = (s) => Number(String(s).trim().replace(/\s|€/g, '').
 // Reparto de los gastos de la comida entre los comensales.
 // Un niño cuenta como `pct` % de un adulto. Devuelve el precio por adulto y por niño,
 // y, para un socio, su parte, lo que ha pagado y lo que le toca pagar (negativo = le deben).
-// cuotaInv = { adulto, nino }: lo que paga cada amigo invitado (Tarifas → Invitados); la familia no paga.
+// cuotaInv = { adulto, nino, famAdulto, famNino }: lo que paga cada invitado (Tarifas → Invitados),
+// amigo o familiar. El socio no paga cuota: de sus "comensales" (familia) el primero es él.
 export function reparto({ apuntados, gastos, pct, meId, consumo = 0, cuotaInv = { adulto: 0, nino: 0 } }) {
+  cuotaInv = { famAdulto: 0, famNino: 0, ...cuotaInv }
   const total = gastos.reduce((s, g) => s + Number(g.importe), 0)
   const peso = (pct ?? 50) / 100
   const adultos = apuntados.reduce((s, a) => s + (a.comensales || 0) + (a.amigos || 0), 0)
@@ -137,7 +141,10 @@ export function reparto({ apuntados, gastos, pct, meId, consumo = 0, cuotaInv = 
   const parte = mio
     ? ((mio.comensales || 0) + (mio.amigos || 0)) * porAdulto + ((mio.ninos || 0) + (mio.amigos_ninos || 0)) * porNino
     : 0
-  const cuotaInvitados = mio ? (mio.amigos || 0) * cuotaInv.adulto + (mio.amigos_ninos || 0) * cuotaInv.nino : 0
+  const cuotaInvitados = mio
+    ? (mio.amigos || 0) * cuotaInv.adulto + (mio.amigos_ninos || 0) * cuotaInv.nino +
+      Math.max(0, (mio.comensales || 0) - 1) * cuotaInv.famAdulto + (mio.ninos || 0) * cuotaInv.famNino
+    : 0
   const pagado = gastos.filter((g) => g.socio_id === meId).reduce((s, g) => s + Number(g.importe), 0)
   return {
     total, adultos, ninos, porAdulto, porNino, parte, cuotaInvitados, consumo, pagado, cuotaInv,
@@ -154,9 +161,19 @@ export function ticketLines(r, consumos = []) {
   const add = (cant, concepto, unidad, detalle) => {
     if (cant > 0) lineas.push({ cant, concepto, detalle, unidad, total: Math.round(cant * unidad * 100) / 100 })
   }
+  const { famAdulto = 0, famNino = 0 } = r.cuotaInv
+  const comida = (precio) => (r.total ? precio : 0)
+  // Con cuota de familiar, la familia sale aparte (el socio, en "Adulto"); sin ella, todos juntos como hasta ahora.
+  const famAdultos = famAdulto ? Math.max(0, (yo.comensales || 0) - 1) : 0
   if (r.total) {
-    add(yo.comensales || 0, 'Adulto', r.porAdulto)
-    add(yo.ninos || 0, 'Niño', r.porNino)
+    add((yo.comensales || 0) - famAdultos, 'Adulto', r.porAdulto)
+    if (!famNino) add(yo.ninos || 0, 'Niño', r.porNino)
+  }
+  add(famAdultos, 'Adulto familiar', comida(r.porAdulto) + famAdulto,
+    r.total ? `${euros(r.porAdulto)} comida + ${euros(famAdulto)} familiar` : 'cuota de familiar')
+  if (famNino) {
+    add(yo.ninos || 0, 'Niño familiar', comida(r.porNino) + famNino,
+      r.total ? `${euros(r.porNino)} comida + ${euros(famNino)} familiar` : 'cuota de familiar')
   }
   add(yo.amigos || 0, 'Adulto amigo', r.porAdulto + r.cuotaInv.adulto,
     r.total ? `${euros(r.porAdulto)} comida + ${euros(r.cuotaInv.adulto)} invitado` : 'cuota de invitado')

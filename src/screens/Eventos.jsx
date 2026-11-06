@@ -22,6 +22,9 @@ export default function Eventos({ meId, today, events, loaded, error, onJoin, on
   return (
     <section className="screen">
       <ScreenTitle title="Eventos" onBack={onBack} />
+      <p className="pantalla-aviso">
+        En esta pantalla solo puedes apuntarte. Para modificar o borrar un evento, quien lo organiza tiene que hacerlo desde el Calendario.
+      </p>
 
       {error ? (
         <div className="empty">
