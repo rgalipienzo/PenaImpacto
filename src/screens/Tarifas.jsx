@@ -6,7 +6,11 @@ import { Pencil, Plus } from '../components/Icons.jsx'
 import { euros, parseEuros } from '../lib.js'
 import { confirmar } from '../components/confirmar.jsx'
 
-const CATEGORIAS = ['Bebidas', 'Comida', 'Invitado', 'Otros']
+// "Bebidas" son las individuales (cada uno apunta las suyas en el evento, van al bote).
+// "Compartidas" son las bebidas de todos (botellas…): las apunta quien organiza y se reparten como la comida.
+const CATEGORIAS = ['Bebidas', 'Compartidas', 'Comida', 'Invitado', 'Otros']
+const ETIQUETA = { Bebidas: 'Bebidas individuales', Compartidas: 'Bebidas compartidas', Invitado: 'Invitados' }
+const etiqueta = (c) => ETIQUETA[c] || c
 
 // Pestaña Tarifas de Estatutos: precios de bebidas y demás. Todos la ven; el administrador la edita.
 export default function Tarifas({ me }) {
@@ -51,7 +55,9 @@ export default function Tarifas({ me }) {
 
   const Grupo = ({ g }) => (
     <div className="card data-list">
-      <div className="data-head"><h2>{g.categoria === 'Invitado' ? 'Invitados' : g.categoria}</h2></div>
+      <div className="data-head"><h2>{etiqueta(g.categoria)}</h2></div>
+      {g.categoria === 'Bebidas' ? <p className="small muted tarifa-nota">Cada socio apunta las suyas en «Mis consumiciones» y las pone en el bote.</p> : null}
+      {g.categoria === 'Compartidas' ? <p className="small muted tarifa-nota">Las apunta quien organiza el evento y se reparten entre todos los comensales.</p> : null}
       {g.items.map((t) =>
         me.es_admin ? (
           <button key={t.id} type="button" className="tarifa-row" onClick={() => setEditing(t)} aria-label={`Editar ${t.nombre}`}>
@@ -138,7 +144,7 @@ function TarifaSheet({ tarifa, onClose, onSave, onDelete }) {
             {CATEGORIAS.map((c) => (
               <label key={c} className={categoria === c ? 'is-on' : ''}>
                 <input type="radio" name="categoria" value={c} checked={categoria === c} onChange={() => setCategoria(c)} />
-                {c}
+                {etiqueta(c)}
               </label>
             ))}
           </div>
@@ -203,8 +209,8 @@ function PrecioNinos({ me }) {
         ) : null}
       </div>
       <div className="tarifa-row"><span>Adulto</span><strong>100 %</strong></div>
-      <div className="tarifa-row"><span>Niño (0 a 14 años)</span><strong>{pct} %</strong></div>
-      <p className="small muted pagos-soon">Los gastos de cada comida se reparten así: un niño paga el {pct} % de lo que paga un adulto.</p>
+      <div className="tarifa-row"><span>Niño</span><strong>{pct} %</strong></div>
+      <p className="small muted pagos-soon">Por defecto, un niño paga el {pct} % de lo que paga un adulto. Quien organiza un evento puede cambiarlo para ese evento (por ejemplo, al 100 %).</p>
 
       {editing ? (
         <Sheet title="Lo que paga un niño" onClose={close}>

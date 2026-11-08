@@ -21,6 +21,7 @@ import Compras from './screens/Compras.jsx'
 import Pagos from './screens/Pagos.jsx'
 import Cuenta from './screens/Cuenta.jsx'
 import Altas from './screens/Altas.jsx'
+import Votaciones from './screens/Votaciones.jsx'
 import SetPassword from './screens/SetPassword.jsx'
 
 const DAYS_AHEAD = 30
@@ -38,6 +39,7 @@ export default function App() {
   const [openId, setOpenId] = useState(null)
   const [openFrom, setOpenFrom] = useState(null) // pestaña desde la que se abrió el evento
   const [creating, setCreating] = useState(null) // null o la fecha con la que empieza el formulario
+  const [desdeVotacion, setDesdeVotacion] = useState(null) // { tipo, titulo, votacionId } si se crea desde una votación
   const [editing, setEditing] = useState(null) // evento que se está modificando
   const [creado, setCreado] = useState(null) // evento recién creado, para avisar al grupo
   const [month, setMonth] = useState(() => monthStart(api.dateKey()))
@@ -153,7 +155,7 @@ export default function App() {
   const closeMenu = useCallback(() => setMenuOpen(false), [])
   const onAvisosSeen = useCallback((vistos) => setMe((m) => ({ ...m, avisos_vistos_at: vistos })), [])
   const closeDetail = useCallback(() => setOpenId(null), [])
-  const closeForm = useCallback(() => setCreating(null), [])
+  const closeForm = useCallback(() => { setCreating(null); setDesdeVotacion(null) }, [])
 
   const home = () => go('inicio')
 
@@ -220,6 +222,7 @@ export default function App() {
             onToday={() => setHomeDay(today)}
             onOpen={(e, desde) => { setOpenFrom(desde === 'dia' ? 'inicio-dia' : 'inicio'); setOpenId(e.id) }}
             onSeeAll={() => go('eventos')}
+            onVotaciones={() => go('votaciones')}
             onRetry={reloadAll}
           />
         ) : tab === 'eventos' ? (
@@ -246,7 +249,15 @@ export default function App() {
             onOpen={(e) => { setOpenFrom('calendario'); setOpenId(e.id) }}
             onNew={(fecha) => setCreating(fecha)}
             onRetry={reloadMonth}
+            onVotaciones={() => go('votaciones')}
             onBack={home}
+          />
+        ) : tab === 'votaciones' ? (
+          <Votaciones
+            me={me}
+            today={today}
+            onBack={() => go('calendario')}
+            onCrearEvento={({ fecha, ...rest }) => { setDesdeVotacion(rest); setCreating(fecha) }}
           />
         ) : tab === 'compras' ? (
           <Compras me={me} today={today} onBack={home} />
@@ -315,10 +326,19 @@ export default function App() {
       {creating ? (
         <EventForm
           initialDate={creating}
+          initialTipo={desdeVotacion?.tipo}
+          initialTitulo={desdeVotacion?.titulo}
           meNombre={me.nombre}
           reservas={reservasMap}
           onClose={closeForm}
-          onSave={async (fields) => { await api.createEvent(fields, userId); setCreating(null); setCreado(fields); await reloadAll() }}
+          onSave={async (fields) => {
+            await api.createEvent(fields, userId)
+            // Si viene de una votación, la votación queda cerrada.
+            if (desdeVotacion) await api.setVotacionCerrada(desdeVotacion.votacionId, true).catch(() => {})
+            closeForm()
+            setCreado(fields)
+            await reloadAll()
+          }}
         />
       ) : null}
 

@@ -120,10 +120,10 @@ function Editar({ event, socio, apuntado, onClose, onSaved }) {
     <Sheet title={socio.nombre} onClose={onClose}>
       <p className="counter-group">Familia</p>
       <Contador id="c-adultos" label="Adultos" hint={`Contando a ${socio.nombre}`} value={adultos} min={1} onChange={setAdultos} />
-      <Contador id="c-ninos" label="Niños" hint="De 0 a 14 años" value={ninos} min={0} onChange={setNinos} />
+      <Contador id="c-ninos" label="Niños" value={ninos} min={0} onChange={setNinos} />
       <p className="counter-group">Amigos invitados</p>
       <Contador id="c-amigos" label="Adultos" value={amigos} min={0} onChange={setAmigos} />
-      <Contador id="c-amigos-ninos" label="Niños" hint="De 0 a 14 años" value={amigosNinos} min={0} onChange={setAmigosNinos} />
+      <Contador id="c-amigos-ninos" label="Niños" value={amigosNinos} min={0} onChange={setAmigosNinos} />
       {error ? <p className="error">{error}</p> : null}
       <div className="actions">
         <button type="button" className="btn primary block" disabled={busy} onClick={() => run(() => api.join(event.id, socio.id, adultos, ninos, amigos, amigosNinos))}>

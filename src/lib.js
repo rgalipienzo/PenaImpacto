@@ -147,38 +147,137 @@ export function reparto({ apuntados, gastos, pct, meId, consumo = 0, cuotaInv = 
     : 0
   const pagado = gastos.filter((g) => g.socio_id === meId).reduce((s, g) => s + Number(g.importe), 0)
   return {
-    total, adultos, ninos, porAdulto, porNino, parte, cuotaInvitados, consumo, pagado, cuotaInv,
+    total, adultos, ninos, porAdulto, porNino, pct: pct ?? 50, parte, cuotaInvitados, consumo, pagado, cuotaInv,
     yo: mio || null,
     saldo: r2(parte + cuotaInvitados + consumo - pagado),
   }
 }
 
-// Líneas del ticket de un socio en un evento: [{ cant, concepto, detalle, unidad, total }]
-// r = resultado de reparto(); consumos = [{ cantidad, nombre, precio }]
-export function ticketLines(r, consumos = []) {
+// Cuentas de un evento al estilo Tricount.
+// La COMIDA se cuadra entre socios por Bizum: cada uno tiene su parte, lo que ha comprado
+// y los Bizums ya hechos; con eso se calcula quién paga a quién (con los menos Bizums posibles).
+// El BOTE (consumiciones + cuotas de invitados y familiares) va aparte, al bote de la peña.
+// reembolsos = [{ id, de, a, importe, deNombre, aNombre }]; pagoBote = { importe, pagado_at } | null
+// botellas = [{ nombre, precio, cantidad }]: botellas de la peña abiertas en el evento. Se reparten
+// entre todos como la comida (los niños con su %) y cada uno pone su parte en el bote.
+export function cuentaEvento({ apuntados, gastos, pct, meId, consumo = 0, cuotaInv, reembolsos = [], pagoBote = null, botellas = [] }) {
+  const r = reparto({ apuntados, gastos, pct, meId, consumo, cuotaInv })
+  // Cada bebida compartida se reparte entre quien la ha bebido (bebedores = { socio: nº de adultos });
+  // si no se ha marcado a nadie, entre todos como la comida.
+  const r2b = (n) => Math.round(n * 100) / 100
+  const botellasLineas = botellas.map((b) => {
+    const coste = r2b(Number(b.precio) * b.cantidad)
+    const beb = b.bebedores && Object.keys(b.bebedores).length ? b.bebedores : null
+    if (beb) {
+      const n = Object.values(beb).reduce((s, x) => s + (Number(x) || 0), 0)
+      const mios = Number(beb[meId]) || 0
+      return { ...b, coste, adultos: n, mios, todos: false, parte: n ? r2b((coste * mios) / n) : 0, porAdulto: n ? r2b(coste / n) : 0 }
+    }
+    const rr = reparto({ apuntados, gastos: [{ importe: coste }], pct, meId })
+    return { ...b, coste, adultos: rr.adultos, todos: true, parte: r2b(rr.parte), porAdulto: rr.porAdulto, porNino: rr.porNino }
+  })
+  const botellasTotal = r2b(botellasLineas.reduce((s, b) => s + b.coste, 0))
+  const parteBotellas = r2b(botellasLineas.reduce((s, b) => s + b.parte, 0))
+  const cent = (n) => Math.round(n * 100)
+  const bal = {} // en céntimos: + le deben, − debe
+  const nombres = {}
+  const compra = {}
+  const mover = (id, n, nombre) => {
+    if (!id) return
+    bal[id] = (bal[id] || 0) + n
+    if (nombre && !nombres[id]) nombres[id] = nombre
+  }
+  for (const a of apuntados) {
+    const parte = ((a.comensales || 0) + (a.amigos || 0)) * r.porAdulto + ((a.ninos || 0) + (a.amigos_ninos || 0)) * r.porNino
+    mover(a.id || a.socio_id, -cent(parte), a.nombre)
+  }
+  for (const g of gastos) {
+    mover(g.socio_id, cent(Number(g.importe)), g.nombre)
+    compra[g.socio_id] = (compra[g.socio_id] || 0) + Number(g.importe)
+  }
+  for (const x of reembolsos) {
+    mover(x.de, cent(x.importe), x.deNombre)
+    mover(x.a, -cent(x.importe), x.aNombre)
+  }
+  // Los céntimos del redondeo se los queda quien más ha comprado.
+  const resto = Object.values(bal).reduce((s, n) => s + n, 0)
+  if (resto && gastos.length) {
+    const top = Object.keys(compra).sort((x, y) => compra[y] - compra[x])[0]
+    bal[top] -= resto
+  }
+
+  // Quién paga a quién: el que más debe paga al que más le deben, y así hasta cuadrar.
+  const deben = Object.entries(bal).filter(([, n]) => n < 0).map(([id, n]) => ({ id, n: -n })).sort((x, y) => y.n - x.n)
+  const cobran = Object.entries(bal).filter(([, n]) => n > 0).map(([id, n]) => ({ id, n })).sort((x, y) => y.n - x.n)
+  const bizums = []
+  for (let i = 0, j = 0; i < deben.length && j < cobran.length;) {
+    const m = Math.min(deben[i].n, cobran[j].n)
+    if (m > 0) bizums.push({ de: deben[i].id, a: cobran[j].id, importe: m / 100, deNombre: nombres[deben[i].id] || '—', aNombre: nombres[cobran[j].id] || '—' })
+    deben[i].n -= m
+    cobran[j].n -= m
+    if (!deben[i].n) i++
+    if (!cobran[j].n) j++
+  }
+
+  const suma = (l) => Math.round(l.reduce((s, t) => s + t.importe, 0) * 100) / 100
+  const misBizums = bizums.filter((t) => t.de === meId)
+  const meDeben = bizums.filter((t) => t.a === meId)
+  const bote = Math.round((r.cuotaInvitados + r.consumo + parteBotellas) * 100) / 100
+  const botePendiente = Math.round((bote - (pagoBote?.importe || 0)) * 100) / 100
+  return {
+    ...r,
+    bizums, // todos los Bizums pendientes del evento
+    misBizums, // los que tengo que hacer yo
+    meDeben, // los que me tienen que hacer a mí
+    hechos: reembolsos.filter((x) => x.de === meId || x.a === meId),
+    reembolsos,
+    comidaPendiente: suma(misBizums),
+    meDebenTotal: suma(meDeben),
+    botellas,
+    botellasTotal,
+    botellasLineas,
+    parteBotellas,
+    bote,
+    pagoBote,
+    botePendiente,
+  }
+}
+
+// Líneas del ticket. Comida: lo que me toca de la compra (adultos y niños, con el % de los niños).
+export function lineasComida(r) {
   const yo = r.yo || {}
   const lineas = []
-  const add = (cant, concepto, unidad, detalle) => {
-    if (cant > 0) lineas.push({ cant, concepto, detalle, unidad, total: Math.round(cant * unidad * 100) / 100 })
+  const add = (cant, concepto, unidad) => {
+    if (cant > 0) lineas.push({ cant, concepto, unidad, total: Math.round(cant * unidad * 100) / 100 })
   }
-  const { famAdulto = 0, famNino = 0 } = r.cuotaInv
-  const comida = (precio) => (r.total ? precio : 0)
-  // Con cuota de familiar, la familia sale aparte (el socio, en "Adulto"); sin ella, todos juntos como hasta ahora.
-  const famAdultos = famAdulto ? Math.max(0, (yo.comensales || 0) - 1) : 0
-  if (r.total) {
-    add((yo.comensales || 0) - famAdultos, 'Adulto', r.porAdulto)
-    if (!famNino) add(yo.ninos || 0, 'Niño', r.porNino)
+  if (!r.total) return lineas
+  const pc = ` (${r.pct} %)`
+  add(yo.comensales || 0, 'Adulto', r.porAdulto)
+  add(yo.ninos || 0, `Niño${pc}`, r.porNino)
+  add(yo.amigos || 0, 'Adulto amigo', r.porAdulto)
+  add(yo.amigos_ninos || 0, `Niño amigo${pc}`, r.porNino)
+  return lineas
+}
+
+// Bote de la peña: cuotas de familiares e invitados y consumiciones (consumos = [{ cantidad, nombre, precio }]).
+export function lineasBote(r, consumos = []) {
+  const yo = r.yo || {}
+  const { adulto = 0, nino = 0, famAdulto = 0, famNino = 0 } = r.cuotaInv || {}
+  const lineas = []
+  const add = (cant, concepto, unidad) => {
+    if (cant > 0 && unidad > 0) lineas.push({ cant, concepto, unidad, total: Math.round(cant * unidad * 100) / 100 })
   }
-  add(famAdultos, 'Adulto familiar', comida(r.porAdulto) + famAdulto,
-    r.total ? `${euros(r.porAdulto)} comida + ${euros(famAdulto)} familiar` : 'cuota de familiar')
-  if (famNino) {
-    add(yo.ninos || 0, 'Niño familiar', comida(r.porNino) + famNino,
-      r.total ? `${euros(r.porNino)} comida + ${euros(famNino)} familiar` : 'cuota de familiar')
+  for (const b of r.botellasLineas || []) {
+    if (b.parte <= 0) continue
+    const detalle = b.todos
+      ? `${euros(b.coste)} entre todos · ${euros(b.porAdulto)} por adulto`
+      : `${euros(b.coste)} entre ${plural(b.adultos, 'adulto', 'adultos')} · ${b.mios > 1 ? `${b.mios} de tu grupo` : 'tú'}`
+    lineas.push({ cant: null, concepto: `${b.cantidad} × ${b.nombre} (compartida)`, detalle, total: b.parte })
   }
-  add(yo.amigos || 0, 'Adulto amigo', r.porAdulto + r.cuotaInv.adulto,
-    r.total ? `${euros(r.porAdulto)} comida + ${euros(r.cuotaInv.adulto)} invitado` : 'cuota de invitado')
-  add(yo.amigos_ninos || 0, 'Niño amigo', r.porNino + r.cuotaInv.nino,
-    r.total ? `${euros(r.porNino)} comida + ${euros(r.cuotaInv.nino)} invitado` : 'cuota de invitado')
+  add(Math.max(0, (yo.comensales || 0) - 1), 'Cuota familiar adulto', famAdulto)
+  add(yo.ninos || 0, 'Cuota familiar niño', famNino)
+  add(yo.amigos || 0, 'Cuota invitado adulto', adulto)
+  add(yo.amigos_ninos || 0, 'Cuota invitado niño', nino)
   for (const c of consumos) add(c.cantidad, c.nombre, Number(c.precio))
   return lineas
 }

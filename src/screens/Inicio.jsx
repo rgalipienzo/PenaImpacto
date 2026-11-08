@@ -3,9 +3,10 @@ import EventCard from '../components/EventCard.jsx'
 import { Chevron } from '../components/Icons.jsx'
 import { horaText, longDate, shortDate } from '../lib.js'
 import { groupByDay } from './Eventos.jsx'
+import { AvisoVotaciones } from './Votaciones.jsx'
 
 // Pantalla principal: el día elegido (hoy al abrir) y los eventos a los que me he apuntado.
-export default function Inicio({ meId, today, day, dayEvents, events, loaded, error, onDay, onToday, onOpen, onSeeAll, onRetry }) {
+export default function Inicio({ meId, today, day, dayEvents, events, loaded, error, onDay, onToday, onOpen, onSeeAll, onVotaciones, onRetry }) {
   const isToday = day === today
   // Mis eventos: a los que voy y los días que he reservado yo.
   const esMio = (e) => e.misComensales > 0 || (e.tipo === 'reserva' && e.organizadorId === meId)
@@ -30,6 +31,8 @@ export default function Inicio({ meId, today, day, dayEvents, events, loaded, er
       ) : null}
 
       {reservaAjena ? <p className="closed-note reserva-note">🔒 Este día está reservado ({horaText(reservaAjena).toLowerCase()}) por {reservaAjena.titulo}.</p> : null}
+
+      <AvisoVotaciones meId={meId} onOpen={onVotaciones} />
 
       <h2 className="section-title">{isToday ? 'Mis eventos de hoy' : 'Mis eventos de este día'}</h2>
 

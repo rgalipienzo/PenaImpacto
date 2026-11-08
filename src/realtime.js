@@ -4,7 +4,7 @@ import { supabase } from './api.js'
 // Tiempo real: cuando cualquier socio cambia algo, Supabase nos avisa y las pantallas
 // abiertas vuelven a cargar sus datos. (Las tablas tienen que estar en la publicación
 // "supabase_realtime": ver supabase/tiempo_real.sql.)
-const TABLAS = ['eventos', 'apuntados', 'listas', 'lista_items', 'gastos_evento', 'consumiciones', 'pagos_evento', 'tarifas', 'ajustes']
+const TABLAS = ['eventos', 'apuntados', 'listas', 'lista_items', 'gastos_evento', 'consumiciones', 'pagos_evento', 'tarifas', 'ajustes', 'votaciones', 'votacion_dias', 'votos', 'reembolsos', 'botellas_evento']
 
 let version = 0
 const oyentes = new Set()

@@ -1,6 +1,7 @@
 import EventCard from '../components/EventCard.jsx'
 import { Chevron, Plus } from '../components/Icons.jsx'
 import ScreenTitle from '../components/ScreenTitle.jsx'
+import { BotonVotaciones } from './Votaciones.jsx'
 import { addDays, monthDays, monthTitle, shortDate } from '../lib.js'
 
 const WEEK = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
@@ -21,7 +22,7 @@ function ringStyle(list) {
 }
 
 // Calendario del mes: cada día muestra un punto por evento. Al tocar un día, salen sus eventos debajo.
-export default function Calendario({ month, today, selected, events, loaded, error, onMonth, onSelect, onOpen, onNew, onRetry, onBack }) {
+export default function Calendario({ month, today, selected, events, loaded, error, onMonth, onSelect, onOpen, onNew, onRetry, onVotaciones, onBack }) {
   const byDay = {}
   for (const e of events) (byDay[e.fecha] ||= []).push(e)
   const dayEvents = byDay[selected] || []
@@ -30,6 +31,7 @@ export default function Calendario({ month, today, selected, events, loaded, err
   return (
     <section className="screen">
       <ScreenTitle title="Calendario" onBack={onBack} />
+      <BotonVotaciones onOpen={onVotaciones} />
       <div className="cal-head">
         <button type="button" className="icon-btn" aria-label="Mes anterior" onClick={() => onMonth(-1)}>
           <Chevron size={22} style={{ transform: 'rotate(180deg)' }} />

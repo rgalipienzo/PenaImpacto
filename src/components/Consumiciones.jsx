@@ -16,7 +16,8 @@ export default function Consumiciones({ eventoId, meId, onTotal }) {
 
   async function load() {
     const [ts, cs] = await Promise.all([api.listTarifas(), api.listMisConsumiciones(eventoId, meId)])
-    setTarifas(ts)
+    // Las bebidas compartidas las apunta quien organiza (gasto común) y los invitados se cobran solos: aquí no salen.
+    setTarifas(ts.filter((t) => t.categoria !== 'Invitado' && !api.esBotella(t)))
     setMine(cs)
   }
 
@@ -45,7 +46,7 @@ export default function Consumiciones({ eventoId, meId, onTotal }) {
   return (
     <section className="detail-block consumos">
       <div className="consumos-head">
-        <h3 className="counter-title">Mis consumiciones</h3>
+        <h3 className="counter-title seccion-titulo">Mis consumiciones</h3>
         {mine.length ? <strong>{euros(total)}</strong> : null}
       </div>
 
@@ -92,7 +93,7 @@ export default function Consumiciones({ eventoId, meId, onTotal }) {
 }
 
 // Pantalla completa con todas las tarifas y su cantidad. Solo se guarda al pulsar "Aceptar".
-function ElegirConsumiciones({ tarifas, mine, onCancel, onAccept }) {
+export function ElegirConsumiciones({ tarifas, mine, onCancel, onAccept, titulo = '¿Qué has consumido?' }) {
   const inicial = Object.fromEntries(mine.filter((c) => c.tarifa_id).map((c) => [c.tarifa_id, c.cantidad]))
   const [cant, setCant] = useState(inicial)
   const [busy, setBusy] = useState(false)
@@ -133,7 +134,7 @@ function ElegirConsumiciones({ tarifas, mine, onCancel, onAccept }) {
         <button type="button" className="back-btn" aria-label="Volver sin guardar" onClick={onCancel}>
           <Chevron size={24} style={{ transform: 'rotate(180deg)' }} />
         </button>
-        <h2 id="consumo-title">¿Qué has consumido?</h2>
+        <h2 id="consumo-title">{titulo}</h2>
       </header>
 
       <div className="consumo-screen-body">

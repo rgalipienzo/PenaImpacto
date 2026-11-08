@@ -581,3 +581,91 @@ button.tarifa-row { cursor: pointer; }
 .login-or { display: flex; align-items: center; gap: 10px; margin: 6px 0 2px; color: var(--muted); font-size: 13px; font-weight: 700; }
 .login-or::before, .login-or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 .oauth-btn { display: flex; align-items: center; justify-content: center; gap: 10px; }
+
+/* Votaciones de días */
+.voto-boton, .voto-aviso { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--line); background: var(--card); color: var(--navy); font: inherit; text-align: left; cursor: pointer; }
+.voto-boton { font-size: 16px; font-weight: 800; }
+.voto-boton > span:first-child, .voto-aviso-icon { font-size: 22px; line-height: 1; }
+.voto-boton-text { flex: 1; }
+.voto-aviso { background: var(--amber); border-color: #F5D27A; }
+.voto-aviso-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.voto-aviso-text strong { font-size: 16px; font-weight: 900; }
+.voto-aviso-text span { font-size: 14px; font-weight: 700; color: var(--almuerzo-ink); }
+.voto.is-closed { opacity: .85; }
+.voto-dias { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.voto-dias li { display: flex; flex-direction: column; gap: 5px; }
+.voto-dia { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px 0 8px; border-radius: 12px; border: 1px solid var(--line); background: var(--ground); color: var(--navy); font: inherit; cursor: pointer; text-align: left; }
+.voto-dia:disabled { cursor: default; }
+.voto-dias li.is-mine .voto-dia { background: var(--sky); border-color: var(--blue); }
+.voto-check { flex: none; display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 8px; border: 2px solid #B9CCE2; background: var(--card); color: #fff; font-weight: 900; font-size: 15px; }
+.voto-dias li.is-mine .voto-check { background: var(--navy); border-color: var(--navy); }
+.voto-fecha { flex: 1; font-size: 16px; font-weight: 800; }
+.voto-top { padding: 2px 8px; border-radius: 999px; background: var(--comida-soft); color: var(--comida-ink); font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: .04em; }
+.voto-num { min-width: 24px; text-align: right; font-size: 18px; font-weight: 900; }
+.voto-barra { height: 6px; margin: 0 4px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.voto-barra span { display: block; height: 100%; border-radius: 999px; background: var(--blue); transition: width .3s; }
+.voto-dias li.is-top .voto-barra span { background: var(--comida); }
+.voto-nombres { padding: 0 4px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.voto-acciones { display: flex; flex-direction: column; gap: 8px; }
+.voto-cal { padding: 10px; }
+.voto-cal .cal-head { margin-bottom: 6px; }
+.voto-cal-title { font-size: 17px; font-weight: 900; }
+.voto-cal .cal-day:disabled { opacity: .45; cursor: default; }
+.voto-elegidos { margin: 6px 0 0; }
+.voto-quien { margin: 0; }
+.voto .event-meta .state { margin-left: 6px; padding: 1px 8px; font-size: 11px; }
+.pct-otro { margin-top: 8px; }
+
+/* Cuentas al estilo Tricount: comida por Bizum y bote de la peña */
+.ticket-sec { margin: 4px 0 2px; font-size: 13px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.ticket-sec:not(:first-child) { margin-top: 14px; padding-top: 12px; border-top: 2px dashed var(--line); }
+.ticket-sub { display: flex; justify-content: space-between; gap: 10px; font-weight: 800; padding: 4px 0; }
+.bizum { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 10px 10px 10px 12px; border-radius: 12px; }
+.bizum.debe { background: var(--almuerzo-soft); color: var(--almuerzo-ink); }
+.bizum.te-deben { background: var(--comida-soft); color: var(--comida-ink); }
+.bizum-text { flex: 1; min-width: 0; font-weight: 700; line-height: 1.3; }
+.bizum-imp { font-size: 17px; font-weight: 900; }
+.bizum-hecho { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-top: 8px; font-size: 14px; font-weight: 700; color: var(--comida-ink); }
+.bizum-hecho > span { flex: 1; min-width: 0; }
+.bizum-ok { margin: 8px 0 0; font-weight: 800; color: var(--comida-ink); }
+.quien-paga { margin-top: 12px; }
+.quien-list { list-style: none; margin: 0; padding: 0; }
+.quien-list li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-weight: 700; }
+.tarifa-row strong.debe { color: var(--red); }
+.tarifa-row strong.te-deben { color: var(--green); }
+.botellas { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.botellas .consumo-list li { display: flex; gap: 10px; align-items: center; }
+.botellas .consumo-list li span:first-child { flex: 1; }
+.tarifa-nota { margin: -4px 0 6px; }
+.lista-acciones { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.lista-acciones .lista-borrar { align-self: auto; }
+.lista-mostrar { padding: 6px 4px; border: 0; background: none; color: var(--blue-text); font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; }
+.lista-mostrar:disabled { opacity: .5; }
+.quitar-pago { display: block; margin: 10px 0 0 auto; }
+.members-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.organiza { flex: none; min-width: 84px; text-align: right; font-size: 15px; font-weight: 900; color: var(--navy); }
+.organiza.sin { color: var(--muted); }
+.segmented.mes-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.botella-btn { width: 100%; }
+.botella-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; text-align: left; }
+.botella-entre { font-size: 13px; font-weight: 700; color: var(--muted); }
+.bebedores-list { list-style: none; margin: 10px 0 0; padding: 0; }
+.bebedores-list li { display: flex; align-items: center; gap: 10px; min-height: 56px; border-top: 1px solid var(--line); }
+.bebedores-list li:first-child { border-top: 0; }
+.bebedor-check { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 8px 0; border: 0; background: none; color: var(--navy); font: inherit; text-align: left; cursor: pointer; }
+.bebedores-list li.is-on .voto-check { background: var(--navy); border-color: var(--navy); }
+.bebedor-nombre { font-size: 16px; font-weight: 800; }
+.bebedores-total { margin: 12px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--sky); color: var(--navy); font-weight: 800; text-align: center; }
+.counter-title.seccion-titulo { font-size: 20px; }
+.consumos-head:has(.seccion-titulo) strong { font-size: 19px; }
+
+/* Línea azul oscuro que separa a los que van de la parte de consumiciones y gastos */
+.detail-block.consumos { border-top: 2px solid var(--navy); padding-top: 16px; }
+/* Línea azul oscuro debajo de Bebidas compartidas, antes del reparto y la cuenta */
+.botellas { border-bottom: 2px solid var(--navy); padding-bottom: 16px; margin-bottom: 6px; }
+.pct-ninos { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.pct-ninos-label { font-size: 13px; font-weight: 800; color: var(--muted); }
+.segmented.pct-seg label { min-height: 40px; font-size: 15px; }
+.pct-otro-row { display: flex; align-items: center; gap: 8px; }
+.pct-otro-row .input { width: 90px; }
+.pct-otro-row span { font-weight: 800; }

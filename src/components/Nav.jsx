@@ -15,7 +15,7 @@ export default function Nav({ tab, onChange }) {
         <button
           key={id}
           type="button"
-          className={`tab${tab === id ? ' is-active' : ''}`}
+          className={`tab${tab === id || (tab === 'votaciones' && id === 'calendario') ? ' is-active' : ''}`}
           aria-current={tab === id ? 'page' : undefined}
           onClick={() => onChange(id)}
         >

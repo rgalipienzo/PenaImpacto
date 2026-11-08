@@ -85,7 +85,7 @@ export default function EventDetail({ event, me, allowDelete, withDeadline, allo
       ) : (
       <>
       <section className="detail-block">
-        <h3 aria-live="polite">
+        <h3 className="counter-title seccion-titulo" aria-live="polite">
           {!allowJoin
             ? `Van ${totalText(sumar(lista)).replace(' · ', ' y ')}`
             : voy ? `Van ${plural(total, 'persona', 'personas')}` : `Van ${plural(event.personas, 'persona', 'personas')}`}
@@ -108,7 +108,7 @@ export default function EventDetail({ event, me, allowDelete, withDeadline, allo
       </section>
 
       {!allowJoin ? (
-        <p className="small muted center-text">{allowExpenses || showExpensesNote ? 'Para cambiar tus acompañantes, ve a la pestaña Eventos.' : 'Para apuntarte o cambiar tus acompañantes, ve a la pestaña Eventos.'}</p>
+        <p className="small muted">{allowExpenses || showExpensesNote ? 'Para cambiar tus acompañantes, ve a la pestaña Eventos.' : 'Para apuntarte o cambiar tus acompañantes, ve a la pestaña Eventos.'}</p>
       ) : cerrado ? (
         <p className="closed-note">
           Ya no te puedes apuntar ni desapuntar: se cierra a la hora de comienzo.
@@ -125,10 +125,10 @@ export default function EventDetail({ event, me, allowDelete, withDeadline, allo
         <h3 className="counter-title">{voy ? 'Acompañantes' : '¿Cuántos vais?'}</h3>
         <p className="counter-group">Familia <span>· {cuotaInv?.famAdulto || cuotaInv?.famNino ? 'paga cuota de familiar' : 'no paga cuota de invitado'}</span></p>
         <Counter id="adultos" label="Adultos" hint={cuotaInv?.famAdulto ? `Contándote a ti · los demás, ${euros(cuotaInv.famAdulto)} cada uno` : 'Contándote a ti'} value={adultos} min={1} onChange={setAdultos} />
-        <Counter id="ninos" label="Niños" hint={cuotaInv?.famNino ? `De 0 a 14 años · ${euros(cuotaInv.famNino)} cada uno` : 'De 0 a 14 años'} value={ninos} min={0} onChange={setNinos} />
+        <Counter id="ninos" label="Niños" hint={cuotaInv?.famNino ? `${euros(cuotaInv.famNino)} cada uno` : undefined} value={ninos} min={0} onChange={setNinos} />
         <p className="counter-group">Amigos invitados <span>· pagan cuota de invitado</span></p>
         <Counter id="amigos" label="Adultos" hint={cuotaInv ? `${euros(cuotaInv.adulto)} cada uno` : null} value={amigos} min={0} onChange={setAmigos} />
-        <Counter id="amigos-ninos" label="Niños" hint={cuotaInv ? `De 0 a 14 años · ${euros(cuotaInv.nino)} cada uno` : 'De 0 a 14 años'} value={amigosNinos} min={0} onChange={setAmigosNinos} />
+        <Counter id="amigos-ninos" label="Niños" hint={cuotaInv ? `${euros(cuotaInv.nino)} cada uno` : undefined} value={amigosNinos} min={0} onChange={setAmigosNinos} />
       </section>
       </>
       )}
@@ -151,7 +151,7 @@ export default function EventDetail({ event, me, allowDelete, withDeadline, allo
               <button type="button" className="btn primary block" disabled={busy} onClick={() => run(() => onJoin(adultos, ninos, amigos, amigosNinos))}>Guardar comensales</button>
             ) : null}
             {esOrganizador ? (
-              <p className="small muted center-text">Como organizador cuentas siempre como mínimo 1 adulto.</p>
+              <p className="small muted">Como organizador cuentas siempre como mínimo 1 adulto.</p>
             ) : (
               <button type="button" className="btn secondary block" disabled={busy} onClick={() => run(onLeave)}>Desapuntarme</button>
             )}

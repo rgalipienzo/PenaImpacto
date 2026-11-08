@@ -8,14 +8,18 @@ import { KIND_LABEL, shortDate } from '../lib.js'
 import { confirmar } from '../components/confirmar.jsx'
 
 // Listas de la compra: las de los próximos eventos y otras sueltas (compra del mes…).
-export default function Compras({ today, onBack }) {
+export default function Compras({ me, today, onBack }) {
   const [data, setData] = useState(null)
+  const [ocultas, setOcultas] = useState(new Set()) // listas que he quitado de mi pantalla
+  const [verQuitadas, setVerQuitadas] = useState(false)
   const [error, setError] = useState('')
   const [creating, setCreating] = useState(false)
 
   const load = useCallback(async () => {
     try {
-      setData(await api.listListas(today))
+      const [d, o] = await Promise.all([api.listListas(today), api.listOcultos('lista')])
+      setData(d)
+      setOcultas(o)
       setError('')
     } catch (err) {
       setError(err.message)
@@ -24,6 +28,9 @@ export default function Compras({ today, onBack }) {
 
   const cambios = useCambios()
   useEffect(() => { load() }, [load, cambios])
+
+  const visible = (l) => !ocultas.has(l.id)
+  const quitadas = data ? [...data.eventos, ...data.otras].filter((l) => ocultas.has(l.id)) : []
 
   return (
     <section className="screen">
@@ -44,18 +51,27 @@ export default function Compras({ today, onBack }) {
       ) : (
         <>
           <h2 className="section-title">Listas de eventos</h2>
-          {data.eventos.length ? (
-            data.eventos.map((l) => <ListaCard key={l.id} lista={l} onChange={load} />)
+          {data.eventos.filter(visible).length ? (
+            data.eventos.filter(visible).map((l) => <ListaCard key={l.id} lista={l} me={me} onChange={load} />)
           ) : (
             <div className="empty">Ningún evento próximo tiene lista. Se añade al crear el evento en el Calendario.</div>
           )}
 
           <h2 className="section-title">Otras listas</h2>
-          {data.otras.length ? (
-            data.otras.map((l) => <ListaCard key={l.id} lista={l} onChange={load} />)
+          {data.otras.filter(visible).length ? (
+            data.otras.filter(visible).map((l) => <ListaCard key={l.id} lista={l} me={me} onChange={load} />)
           ) : (
             <div className="empty">No hay otras listas. Crea una para la compra del mes o lo que haga falta.</div>
           )}
+
+          {quitadas.length ? (
+            <>
+              <button type="button" className="btn link-btn block" onClick={() => setVerQuitadas(!verQuitadas)}>
+                {verQuitadas ? 'Esconder las listas que has quitado' : `Ver ${quitadas.length === 1 ? 'la lista que has quitado' : `las ${quitadas.length} listas que has quitado`}`}
+              </button>
+              {verQuitadas ? quitadas.map((l) => <ListaCard key={l.id} lista={l} me={me} oculta onChange={load} />) : null}
+            </>
+          ) : null}
         </>
       )}
 
@@ -82,7 +98,7 @@ function guardarAbierta(id, abierta) {
 }
 
 // Cada lista se ve plegada (solo la cabecera); al tocarla se despliega y sigue así hasta que se vuelve a tocar.
-function ListaCard({ lista, onChange }) {
+function ListaCard({ lista, me, oculta = false, onChange }) {
   const [abierta, setAbierta] = useState(() => leerAbiertas().has(lista.id))
   const [texto, setTexto] = useState('')
   const [busy, setBusy] = useState(false)
@@ -112,9 +128,16 @@ function ListaCard({ lista, onChange }) {
     run(async () => { await api.addItem(lista.id, t); setTexto('') })
   }
 
+  const nombre = ev ? ev.titulo : lista.nombre
+  // Borrar para todos: quien creó la lista, quien organiza su evento o un administrador.
+  const puedeBorrar = lista.creado_por === me.id || ev?.organizador_id === me.id || me.es_admin
+
   async function borrarLista() {
-    const nombre = ev ? ev.titulo : lista.nombre
-    if (await confirmar(`¿Borrar la lista «${nombre}»?`, { si: 'Borrar' })) run(() => api.deleteLista(lista.id))
+    if (await confirmar(`¿Borrar la lista «${nombre}» para todos los socios?`, { si: 'Borrar para todos' })) run(() => api.deleteLista(lista.id))
+  }
+
+  function quitarLista() {
+    run(() => api.ocultar('lista', lista.id))
   }
 
   function toggle() {
@@ -168,10 +191,10 @@ function ListaCard({ lista, onChange }) {
             <p className="lista-count">Todavía está vacía.</p>
           )}
 
-          {completa ? (
+          {completa && !oculta ? (
             <div className="lista-done">
               <span>✓ Compra completada</span>
-              <button type="button" className="btn danger small-btn" disabled={busy} onClick={borrarLista}>Borrar lista</button>
+              <button type="button" className="btn danger small-btn" disabled={busy} onClick={quitarLista}>Quitar de mi pantalla</button>
             </div>
           ) : null}
 
@@ -180,10 +203,15 @@ function ListaCard({ lista, onChange }) {
             <button type="submit" className="btn primary small-btn" disabled={busy || !texto.trim()}>Añadir</button>
           </form>
 
-          {/* Cuando está todo comprado, el botón ya sale arriba en verde. */}
-          {!completa ? (
-            <button type="button" className="lista-borrar" disabled={busy} onClick={borrarLista}>Borrar lista</button>
-          ) : null}
+          <div className="lista-acciones">
+            {oculta ? (
+              <button type="button" className="lista-mostrar" disabled={busy} onClick={() => run(() => api.mostrar('lista', lista.id))}>Volver a mostrarla</button>
+            ) : !completa ? (
+              // Cuando está todo comprado, «Quitar de mi pantalla» ya sale arriba en verde.
+              <button type="button" className="lista-mostrar" disabled={busy} onClick={quitarLista}>Quitar de mi pantalla</button>
+            ) : <span />}
+            {puedeBorrar ? <button type="button" className="lista-borrar" disabled={busy} onClick={borrarLista}>Borrar para todos</button> : null}
+          </div>
         </>
       ) : null}
       {error ? <p className="error">{error}</p> : null}

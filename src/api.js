@@ -3,7 +3,7 @@ import { SUPABASE_URL, SUPABASE_KEY, DEMO } from './config.js'
 import * as demo from './demo.js'
 
 export { dateKey, addDays } from './lib.js'
-import { dateKey, reparto } from './lib.js'
+import { dateKey, reparto, cuentaEvento } from './lib.js'
 
 // Si al volver de Google/Microsoft hay un error, viene en la dirección: se lee antes de que Supabase la limpie.
 export const OAUTH_ERROR = (() => {
@@ -124,6 +124,7 @@ function shape(e, meId) {
     compra: sortItems(e.lista?.items || []).map((i) => i.texto), // cosas de la lista de la compra
     organizadorId: e.organizador_id,
     reabierto: !!e.reabierto, // el organizador lo ha vuelto a abrir para apuntarse después de la hora
+    porcentajeNinos: e.porcentaje_ninos ?? null, // lo que paga un niño en este evento (null: el de Tarifas)
     organizador: e.organizador?.nombre || '—',
     apuntados,
     personas: apuntados.reduce((n, a) => n + a.comensales + a.ninos + a.amigos + a.amigos_ninos, 0),
@@ -136,7 +137,7 @@ function shape(e, meId) {
 }
 
 const EVENT_FIELDS =
-  'id, fecha, hora, tipo, titulo, notas, organizador_id, reabierto, lista:listas(id, items:lista_items(id, texto, comprado, created_at)), organizador:socios!eventos_organizador_id_fkey(nombre), apuntados(socio_id, comensales, ninos, amigos, amigos_ninos, socio:socios(nombre))'
+  'id, fecha, hora, tipo, titulo, notas, organizador_id, reabierto, porcentaje_ninos, lista:listas(id, items:lista_items(id, texto, comprado, created_at)), organizador:socios!eventos_organizador_id_fkey(nombre), apuntados(socio_id, comensales, ninos, amigos, amigos_ninos, socio:socios(nombre))'
 
 // Eventos entre dos fechas (incluidas), ordenados por fecha y hora.
 export async function listEvents(fromKey, toKey, meId) {
@@ -180,6 +181,13 @@ export async function deleteEvent(id) {
   if (error) throw error
 }
 
+// Quien organiza el evento (o un administrador) cambia lo que paga un niño en ese evento.
+export async function setPorcentajeNinos(eventId, pct) {
+  const { data, error } = await supabase.from('eventos').update({ porcentaje_ninos: pct }).eq('id', eventId).select('id')
+  if (error) throw error
+  if (!data?.length) throw new Error('Solo quien organiza el evento o un administrador lo puede cambiar.')
+}
+
 // Quien organiza el evento lo vuelve a abrir (o lo cierra) para apuntarse después de la hora.
 export async function setReabierto(eventId, reabierto) {
   if (DEMO) return
@@ -187,7 +195,7 @@ export async function setReabierto(eventId, reabierto) {
   if (error) throw error
 }
 
-// Familia: comensales = adultos (contándome a mí), ninos = niños de 0 a 14 años.
+// Familia: comensales = adultos (contándome a mí), ninos = niños.
 // Amigos invitados: amigos = adultos, amigosNinos = niños (pagan la cuota de invitado).
 export async function join(eventId, meId, comensales, ninos = 0, amigos = 0, amigosNinos = 0) {
   if (DEMO) return demo.join(eventId, comensales, ninos, amigos, amigosNinos)
@@ -210,6 +218,12 @@ export async function listSocios() {
   const { data, error } = await supabase.from('socios').select('*').order('nombre')
   if (error) throw error
   return data
+}
+
+// Solo administradores: mes en que organiza un socio (1-12, o null).
+export async function setMesOrganiza(socioId, mes) {
+  const { error } = await supabase.rpc('set_mes_organiza', { p_socio: socioId, p_mes: mes })
+  if (error) throw error
 }
 
 export async function getNormas() {
@@ -305,6 +319,59 @@ export async function setComprado(itemId, comprado) {
 export async function deleteItem(itemId) {
   if (DEMO) return demo.deleteItem(itemId)
   const { error } = await supabase.from('lista_items').delete().eq('id', itemId)
+  if (error) throw error
+}
+
+// ---- Votaciones (qué día hacemos la comida o la cena) ----
+
+const faltaVotaciones = (err) =>
+  /votacion|votos|PGRST20[0-5]|schema cache/i.test(err.message) ? new Error('Falta preparar las votaciones en Supabase.') : err
+
+// Todas las votaciones, abiertas primero y luego las más nuevas. Cada día con quién lo ha votado.
+export async function listVotaciones() {
+  if (DEMO) return []
+  const { data, error } = await supabase
+    .from('votaciones')
+    .select('id, titulo, tipo, cerrada, creado_por, created_at, autor:socios!votaciones_creado_por_fkey(nombre), dias:votacion_dias(id, fecha, votos(socio_id, socio:socios!votos_socio_id_fkey(nombre)))')
+    .order('created_at', { ascending: false })
+  if (error) throw faltaVotaciones(error)
+  return data
+    .map((v) => ({
+      ...v,
+      autor: v.autor?.nombre || '',
+      dias: (v.dias || [])
+        .map((d) => ({ id: d.id, fecha: d.fecha, votos: (d.votos || []).map((x) => ({ id: x.socio_id, nombre: x.socio?.nombre || '' })) }))
+        .sort((a, b) => a.fecha.localeCompare(b.fecha)),
+    }))
+    .sort((a, b) => Number(a.cerrada) - Number(b.cerrada))
+}
+
+export async function createVotacion({ titulo, tipo, fechas }) {
+  const { data, error } = await supabase.from('votaciones').insert({ titulo, tipo }).select('id').single()
+  if (error) throw faltaVotaciones(error)
+  const { error: e2 } = await supabase.from('votacion_dias').insert(fechas.map((fecha) => ({ votacion_id: data.id, fecha })))
+  if (e2) {
+    await supabase.from('votaciones').delete().eq('id', data.id)
+    throw e2
+  }
+}
+
+export async function votar(diaId, socioId, si) {
+  const q = si
+    ? supabase.from('votos').insert({ dia_id: diaId, socio_id: socioId })
+    : supabase.from('votos').delete().eq('dia_id', diaId).eq('socio_id', socioId)
+  const { error } = await q
+  if (error && !/duplicate/i.test(error.message)) throw error
+}
+
+export async function setVotacionCerrada(id, cerrada) {
+  const { data, error } = await supabase.from('votaciones').update({ cerrada }).eq('id', id).select('id')
+  if (error) throw error
+  if (!data?.length) throw new Error('Solo quien ha creado la votación o un administrador puede cambiarla.')
+}
+
+export async function deleteVotacion(id) {
+  const { error } = await supabase.from('votaciones').delete().eq('id', id)
   if (error) throw error
 }
 
@@ -544,13 +611,13 @@ export async function deleteGasto(id) {
   if (error) throw error
 }
 
-// Mis cuentas por evento: mi parte de la comida + mis consumiciones − lo que he pagado.
-// Incluye los eventos a los que voy y aquellos donde he consumido o pagado algo aunque no vaya.
-// Solo eventos con gastos o consumiciones, del más reciente al más antiguo.
+// Mis cuentas por evento (al estilo Tricount): la comida se cuadra con Bizums entre socios
+// y las consumiciones y cuotas de invitados van al bote. Incluye los eventos a los que voy y aquellos
+// donde he comprado o consumido algo aunque no vaya. Del más reciente al más antiguo.
 export async function listMisCuentas(meId) {
-  if (DEMO) return demo.listMisCuentas()
-  const EV = 'id, fecha, hora, tipo, titulo, apuntados(socio_id, comensales, ninos, amigos, amigos_ninos)'
-  const [{ data: mios, error: e1 }, { data: misPagos, error: e2 }, consumos, ajustes, cuotaInv] = await Promise.all([
+  if (DEMO) return []
+  const EV = 'id, fecha, hora, tipo, titulo, porcentaje_ninos, apuntados(socio_id, comensales, ninos, amigos, amigos_ninos, socio:socios(nombre))'
+  const [{ data: mios, error: e1 }, { data: misCompras, error: e2 }, consumos, ajustes, cuotaInv] = await Promise.all([
     supabase.from('apuntados').select(`evento:eventos(${EV})`).eq('socio_id', meId),
     supabase.from('gastos_evento').select('evento_id').eq('socio_id', meId),
     listMisGastos(meId),
@@ -560,7 +627,7 @@ export async function listMisCuentas(meId) {
   if (e1) throw e1
   if (e2) throw e2
   const eventos = (mios || []).map((m) => m.evento).filter(Boolean)
-  const faltan = [...new Set([...misPagos.map((g) => g.evento_id), ...consumos.map((c) => c.evento.id)])]
+  const faltan = [...new Set([...misCompras.map((g) => g.evento_id), ...consumos.map((c) => c.evento.id)])]
     .filter((id) => !eventos.some((e) => e.id === id))
   if (faltan.length) {
     const { data, error } = await supabase.from('eventos').select(EV).in('id', faltan)
@@ -569,30 +636,130 @@ export async function listMisCuentas(meId) {
   }
   const ids = eventos.map((e) => e.id)
   let gastos = []
-  let pagos = []
+  let botes = []
+  let reembolsos = []
+  let botellas = []
   if (ids.length) {
-    const { data, error } = await supabase.from('gastos_evento').select('evento_id, socio_id, importe').in('evento_id', ids)
+    const { data, error } = await supabase.from('gastos_evento').select('evento_id, socio_id, importe, socio:socios(nombre)').in('evento_id', ids)
     if (error) throw error
-    gastos = data
+    gastos = data.map((g) => ({ ...g, importe: Number(g.importe), nombre: g.socio?.nombre || '—' }))
     const { data: ps, error: e3 } = await supabase.from('pagos_evento').select('evento_id, importe, pagado_at').eq('socio_id', meId).in('evento_id', ids)
-    if (!e3) pagos = ps // si aún no existe la tabla, se sigue sin pagos
+    if (!e3) botes = ps
+    reembolsos = await listReembolsos(ids).catch(() => [])
+    botellas = await listBotellas(ids).catch(() => [])
   }
   const out = []
   for (const e of eventos) {
     const g = gastos.filter((x) => x.evento_id === e.id)
     const c = consumos.find((x) => x.evento.id === e.id)
-    const yo = e.apuntados.find((x) => x.socio_id === meId)
-    const conFamilia = (cuotaInv.famAdulto && yo?.comensales > 1) || (cuotaInv.famNino && yo?.ninos)
-    if (!g.length && !c && !(yo?.amigos || yo?.amigos_ninos || conFamilia)) continue
-    const p = pagos.find((x) => x.evento_id === e.id)
-    out.push({
-      evento: e,
-      consumos: c?.items || [],
-      pago: p ? { importe: Number(p.importe), pagado_at: p.pagado_at } : null,
-      ...reparto({ apuntados: e.apuntados, gastos: g, pct: ajustes.porcentajeNinos, meId, consumo: c?.total || 0, cuotaInv }),
+    const p = botes.find((x) => x.evento_id === e.id)
+    const apuntados = e.apuntados.map((a) => ({ ...a, id: a.socio_id, nombre: a.socio?.nombre || '—' }))
+    const k = cuentaEvento({
+      apuntados,
+      gastos: g,
+      pct: e.porcentaje_ninos ?? ajustes.porcentajeNinos,
+      meId,
+      consumo: c?.total || 0,
+      cuotaInv,
+      reembolsos: reembolsos.filter((x) => x.evento_id === e.id),
+      pagoBote: p ? { importe: Number(p.importe), pagado_at: p.pagado_at } : null,
+      botellas: botellas.filter((b) => b.evento_id === e.id),
     })
+    if (!g.length && !k.bote && !k.hechos.length) continue
+    out.push({ ...k, evento: e, consumos: c?.items || [] })
   }
   return out.sort((a, b) => (b.evento.fecha + b.evento.hora).localeCompare(a.evento.fecha + a.evento.hora))
+}
+
+// ---- Botellas de la peña abiertas en un evento (gasto común) ----
+
+export async function listBotellas(eventoIds) {
+  if (DEMO) return []
+  const { data, error } = await supabase.from('botellas_evento').select('id, evento_id, tarifa_id, nombre, precio, cantidad, bebedores').in('evento_id', eventoIds)
+  if (error) {
+    if (/botellas_evento|PGRST20[0-5]|schema cache/i.test(error.message)) throw new Error('Falta preparar las botellas en Supabase.')
+    throw error
+  }
+  return data.map((b) => ({ ...b, precio: Number(b.precio) }))
+}
+
+// Deja la cantidad de una botella en el evento (0 = quitarla). Solo quien organiza o un administrador.
+export async function setBotella(eventoId, tarifa, cantidad) {
+  if (cantidad <= 0) {
+    const { error } = await supabase.from('botellas_evento').delete().eq('evento_id', eventoId).eq('tarifa_id', tarifa.id)
+    if (error) throw error
+    return
+  }
+  const { error } = await supabase.from('botellas_evento').upsert(
+    { evento_id: eventoId, tarifa_id: tarifa.id, nombre: tarifa.nombre, precio: tarifa.precio, cantidad },
+    { onConflict: 'evento_id,tarifa_id' },
+  )
+  if (error) throw error
+}
+
+// Bebidas compartidas (botellas…): en Tarifas, la categoría «Bebidas compartidas».
+// Quién ha bebido una bebida compartida: { socio: nº de adultos } o null (todos).
+export async function setBebedores(botellaId, bebedores) {
+  const { data, error } = await supabase.from('botellas_evento').update({ bebedores }).eq('id', botellaId).select('id')
+  if (error) {
+    if (/bebedores|PGRST20[0-5]|schema cache/i.test(error.message)) throw new Error('Falta preparar «¿Quién ha bebido?» en Supabase.')
+    throw error
+  }
+  if (!data?.length) throw new Error('Solo quien organiza el evento o un administrador puede cambiarlo.')
+}
+
+export const esBotella = (t) => t.categoria === 'Compartidas'
+
+// ---- Lo que cada socio quita de su pantalla (listas y eventos de Pagos). No se borra para los demás. ----
+
+export async function listOcultos(tipo) {
+  if (DEMO) return new Set()
+  const { data, error } = await supabase.from('ocultos').select('ref_id').eq('tipo', tipo)
+  if (error) {
+    if (/ocultos|PGRST20[0-5]|schema cache/i.test(error.message)) return new Set()
+    throw error
+  }
+  return new Set(data.map((o) => o.ref_id))
+}
+
+export async function ocultar(tipo, refId) {
+  const { error } = await supabase.from('ocultos').upsert({ tipo, ref_id: refId }, { onConflict: 'socio_id,tipo,ref_id' })
+  if (error) {
+    if (/ocultos|PGRST20[0-5]|schema cache/i.test(error.message)) throw new Error('Falta preparar «Quitar de mi pantalla» en Supabase.')
+    throw error
+  }
+}
+
+export async function mostrar(tipo, refId) {
+  const { error } = await supabase.from('ocultos').delete().eq('tipo', tipo).eq('ref_id', refId)
+  if (error) throw error
+}
+
+// ---- Bizums entre socios para cuadrar la comida ----
+
+const faltaBizums = (err) =>
+  /reembolsos|PGRST20[0-5]|schema cache/i.test(err.message) ? new Error('Falta preparar los Bizums en Supabase.') : err
+
+export async function listReembolsos(eventoIds) {
+  if (DEMO) return []
+  const { data, error } = await supabase
+    .from('reembolsos')
+    .select('id, evento_id, de_socio, a_socio, importe, created_at, de:socios!reembolsos_de_socio_fkey(nombre), a:socios!reembolsos_a_socio_fkey(nombre)')
+    .in('evento_id', eventoIds)
+    .order('created_at')
+  if (error) throw faltaBizums(error)
+  return data.map((x) => ({ id: x.id, evento_id: x.evento_id, de: x.de_socio, a: x.a_socio, importe: Number(x.importe), created_at: x.created_at, deNombre: x.de?.nombre || '—', aNombre: x.a?.nombre || '—' }))
+}
+
+// Apunta un Bizum hecho (lo puede apuntar quien paga o quien lo recibe).
+export async function marcarBizum(eventoId, de, a, importe) {
+  const { error } = await supabase.from('reembolsos').insert({ evento_id: eventoId, de_socio: de, a_socio: a, importe })
+  if (error) throw faltaBizums(error)
+}
+
+export async function deshacerBizum(id) {
+  const { error } = await supabase.from('reembolsos').delete().eq('id', id)
+  if (error) throw error
 }
 
 export async function deleteConsumicion(id) {

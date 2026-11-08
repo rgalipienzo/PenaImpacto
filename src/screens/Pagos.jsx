@@ -96,44 +96,61 @@ function CuotaSheet({ cuota, onClose, onSave }) {
   )
 }
 
-// Mi cuenta de cada evento: mi parte de la comida + mis consumiciones − lo que he pagado yo.
+// Mis cuentas de cada evento: los Bizums de la comida (que tengo que hacer o recibir) y lo del bote.
 function MisGastos({ meId }) {
   const [list, setList] = useState(null)
   const [error, setError] = useState('')
   const [abiertos, setAbiertos] = useState({}) // evento id → true si su ticket está desplegado
+  const [ocultos, setOcultos] = useState(new Set()) // eventos que he quitado de mi pantalla
+  const [verQuitados, setVerQuitados] = useState(false)
 
   const cambios = useCambios()
-  useEffect(() => {
-    api.listMisCuentas(meId).then(setList, (err) => setError(err.message))
-  }, [meId, cambios])
+  const load = useCallback(() => Promise.all([api.listMisCuentas(meId), api.listOcultos('pago')]).then(
+    ([l, o]) => { setList(l); setOcultos(o) },
+    (err) => setError(err.message),
+  ), [meId])
+  useEffect(() => { load() }, [load, cambios])
 
-  // Lo pendiente de cada evento: si lo marqué como pagado, solo cuenta la diferencia (si la cuenta cambió después).
-  const pendiente = (g) => (g.pago && g.saldo > 0 ? Math.round((g.saldo - g.pago.importe) * 100) / 100 : g.saldo)
-  const saldo = (list || []).reduce((s, g) => s + pendiente(g), 0)
+  const r2 = (n) => Math.round(n * 100) / 100
+  const debo = (g) => r2(g.comidaPendiente + Math.max(0, g.botePendiente))
+  const totalBizums = r2((list || []).reduce((s, g) => s + g.comidaPendiente, 0))
+  const totalBote = r2((list || []).reduce((s, g) => s + Math.max(0, g.botePendiente), 0))
+  const meDeben = r2((list || []).reduce((s, g) => s + g.meDebenTotal, 0))
   const toggle = (id) => setAbiertos((a) => ({ ...a, [id]: !a[id] }))
+  // Solo se puede quitar un evento cuadrado; si después vuelve a quedar algo pendiente, sale otra vez.
+  const cuadrado = (g) => debo(g) <= 0.005 && g.meDebenTotal <= 0.005
+  const quitado = (g) => ocultos.has(g.evento.id) && cuadrado(g)
+  const visibles = (list || []).filter((g) => !quitado(g))
+  const quitados = (list || []).filter(quitado)
 
   return (
     <>
       <div className="card data-list">
         <div className="data-head">
-          <h2>Mis gastos en eventos</h2>
-          {list?.length ? <strong className={`gastos-total${saldo < 0 ? ' te-deben' : saldo > 0.005 ? ' debe' : ''}`}>{euros(Math.abs(saldo))}</strong> : null}
+          <h2>Mis cuentas en eventos</h2>
         </div>
         {error ? (
-          <p className="error pagos-soon">No se han podido cargar tus gastos.</p>
+          <p className="error pagos-soon">No se han podido cargar tus cuentas.</p>
         ) : !list ? (
           <p className="muted pagos-soon">Cargando…</p>
         ) : list.length ? (
-          <p className="small muted pagos-soon">
-            {Math.abs(saldo) < 0.005 ? 'Lo tienes todo pagado.' : `${saldo < 0 ? 'En total te deben' : 'En total te queda por pagar'} ${euros(Math.abs(saldo))}.`} Toca un evento para ver su ticket.
-          </p>
+          <>
+            {totalBizums ? <div className="tarifa-row"><span>Bizums que tienes que hacer</span><strong className="debe">{euros(totalBizums)}</strong></div> : null}
+            {totalBote ? <div className="tarifa-row"><span>Para poner en el bote</span><strong className="debe">{euros(totalBote)}</strong></div> : null}
+            {meDeben ? <div className="tarifa-row"><span>Te tienen que pagar</span><strong className="te-deben">{euros(meDeben)}</strong></div> : null}
+            <p className="small muted pagos-soon">
+              {!totalBizums && !totalBote && !meDeben ? 'Lo tienes todo cuadrado. ' : ''}La comida se paga por Bizum entre socios; las consumiciones y los invitados, al bote. Toca un evento para ver su cuenta.
+            </p>
+          </>
         ) : (
           <p className="muted pagos-soon">Todavía no tienes gastos. Se apuntan en la pantalla principal, tocando tu evento.</p>
         )}
       </div>
 
-      {(list || []).map((g) => {
+      {[...visibles, ...(verQuitados ? quitados : [])].map((g) => {
         const open = !!abiertos[g.evento.id]
+        const esQuitado = quitado(g)
+        const d = debo(g)
         return (
           <div key={g.evento.id} className={`card gasto-card ${g.evento.tipo}${open ? ' is-open' : ''}`}>
             <button type="button" className="gasto-head gasto-toggle" aria-expanded={open} onClick={() => toggle(g.evento.id)}>
@@ -141,31 +158,34 @@ function MisGastos({ meId }) {
                 <span className="event-meta"><span className={`event-kind ${g.evento.tipo}`}>{KIND_LABEL[g.evento.tipo]}</span> · {shortDate(g.evento.fecha)}</span>
                 <span className="data-value">{g.evento.titulo}</span>
               </span>
-              {g.pago && Math.abs(pendiente(g)) < 0.005 ? (
-                <span className="state ok">Pagado</span>
+              {d > 0.005 ? (
+                <strong className="debe">{euros(d)}</strong>
+              ) : g.meDebenTotal > 0.005 ? (
+                <strong className="te-deben">+{euros(g.meDebenTotal)}</strong>
               ) : (
-                <strong className={g.saldo < 0 ? 'te-deben' : pendiente(g) > 0.005 ? 'debe' : ''}>{g.saldo < 0 ? '+' : ''}{euros(Math.abs(g.pago ? pendiente(g) : g.saldo))}</strong>
+                <span className="state ok">Cuadrado</span>
               )}
               <Chevron size={20} className="gasto-chevron" />
             </button>
             {open ? (
-              <Ticket r={g} consumos={g.consumos}>
-                {g.pago ? (
-                  <ul className="gasto-items">
-                    <li className="gasto-pagado">
-                      <span>✓ Pagado el {new Date(g.pago.pagado_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}</span>
-                      <span>{euros(g.pago.importe)}</span>
-                    </li>
-                    {Math.abs(pendiente(g)) >= 0.005 ? (
-                      <li className={`gasto-saldo${pendiente(g) > 0 ? ' debe' : ' te-deben'}`}><span>{pendiente(g) > 0 ? 'Me falta por pagar' : 'He pagado de más'}</span><span>{euros(Math.abs(pendiente(g)))}</span></li>
-                    ) : null}
-                  </ul>
+              <>
+                <Ticket k={g} eventoId={g.evento.id} meId={meId} consumos={g.consumos} onChange={load} />
+                {esQuitado ? (
+                  <button type="button" className="lista-mostrar quitar-pago" onClick={() => api.mostrar('pago', g.evento.id).then(load, (err) => setError(err.message))}>Volver a mostrarlo</button>
+                ) : cuadrado(g) ? (
+                  <button type="button" className="lista-mostrar quitar-pago" onClick={() => api.ocultar('pago', g.evento.id).then(load, (err) => setError(err.message))}>Quitar de mi pantalla</button>
                 ) : null}
-              </Ticket>
+              </>
             ) : null}
           </div>
         )
       })}
+
+      {quitados.length ? (
+        <button type="button" className="btn link-btn block" onClick={() => setVerQuitados(!verQuitados)}>
+          {verQuitados ? 'Esconder los eventos que has quitado' : `Ver ${quitados.length === 1 ? 'el evento que has quitado' : `los ${quitados.length} eventos que has quitado`}`}
+        </button>
+      ) : null}
     </>
   )
 }

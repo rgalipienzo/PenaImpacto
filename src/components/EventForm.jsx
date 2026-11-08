@@ -5,11 +5,11 @@ import { FRANJAS, KINDS, dateKey } from '../lib.js'
 
 // Sirve para crear un evento nuevo o, si recibe `event`, para modificarlo.
 // reservas: { 'AAAA-MM-DD': 'Nombre' } para avisar si el día ya está reservado.
-export default function EventForm({ event, initialDate, reservas = {}, meNombre = '', onClose, onSave }) {
-  const [tipo, setTipo] = useState(event?.tipo || 'comida')
+export default function EventForm({ event, initialDate, initialTipo, initialTitulo, reservas = {}, meNombre = '', onClose, onSave }) {
+  const [tipo, setTipo] = useState(event?.tipo || initialTipo || 'comida')
   const [fecha, setFecha] = useState(event?.fecha || initialDate || dateKey())
-  const [hora, setHora] = useState(event?.hora || '14:30')
-  const [titulo, setTitulo] = useState(event?.titulo || '')
+  const [hora, setHora] = useState(event?.hora || KINDS.find((k) => k.id === initialTipo)?.hora || '14:30')
+  const [titulo, setTitulo] = useState(event?.titulo || initialTitulo || '')
   const [notas, setNotas] = useState(event?.notas || '')
   const [compra, setCompra] = useState(event ? event.compra.join('\n') : '')
   const [busy, setBusy] = useState(false)
@@ -30,7 +30,8 @@ export default function EventForm({ event, initialDate, reservas = {}, meNombre 
     setBusy(true)
     setError('')
     try {
-      await onSave({ tipo, fecha, hora, titulo: titulo.trim() || (reserva ? meNombre : kind.titulo), notas: notas.trim() || null, compra: reserva ? '' : compra })
+      const fields = { tipo, fecha, hora, titulo: titulo.trim() || (reserva ? meNombre : kind.titulo), notas: notas.trim() || null, compra: reserva ? '' : compra }
+      await onSave(fields)
     } catch (err) {
       setError(err.message)
       setBusy(false)
